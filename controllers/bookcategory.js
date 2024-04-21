@@ -1,13 +1,14 @@
 import { handleError } from '../common/error.js'
-import pool from '../database/database.js'
+import knex from '../database/database.js'
 
 export async function createRelation(req, res) {
   const { bookid, categoryid } = req.params
 
-  const q = 'INSERT INTO book_category (book_id, category_id) VALUES (?, ?)'
-
   try {
-    const [_result] = await pool.query(q, [bookid, categoryid])
+    await knex('book_category').insert({
+      book_id: bookid,
+      category_id: categoryid
+    })
 
     res.status(201).json({ ok: 'Relationship created' })
   } catch (err) {
@@ -18,18 +19,19 @@ export async function createRelation(req, res) {
 export async function deleteRelation(req, res) {
   const { bookid, categoryid } = req.params
 
-  const q = 'DELETE FROM book_category WHERE book_id = ? AND category_id = ?'
-
   try {
-    const [result] = await pool.query(q, [bookid, categoryid])
+    const affectedRows = await knex('book_category')
+      .delete()
+      .where('book_id', bookid)
+      .where('category_id', categoryid)
 
-    if (result.affectedRows) {
-      res.status(204).json()
-    } else {
-      res.status(404).json({
+    if (!affectedRows) {
+      return res.status(404).json({
         error: `Relation book_id=${bookid}, category_id=${categoryid} does not exists`
       })
     }
+
+    res.status(204).json()
   } catch (err) {
     handleError(err, res)
   }

@@ -1,10 +1,13 @@
-import { createPool } from 'mysql2'
+import knex from 'knex'
 
-const pool = createPool({
-  host: process.env.MYSQL_HOST,
-  user: 'root',
-  password: process.env.MYSQL_ROOT_PASSWORD,
-  database: 'qlibrarydb'
-}).promise()
-
-export default pool
+export default knex({
+  client: 'mysql2',
+  connection: {
+    host: process.env.MYSQL_HOST,
+    port: 3306,
+    user: 'root',
+    password: process.env.MYSQL_ROOT_PASSWORD,
+    database: 'qlibrarydb'
+  },
+  pool: { min: 0, max: 7 }
+})

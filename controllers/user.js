@@ -1,4 +1,4 @@
-import pool from '../database/database.js'
+import knex from '../database/database.js'
 import bcrypt from 'bcrypt'
 
 import jwt from 'jsonwebtoken'
@@ -7,10 +7,10 @@ import { handleError } from '../common/error.js'
 export async function register(req, res) {
   const { username, password } = req.body
 
-  const q = 'SELECT * FROM user WHERE username = ?'
-
   try {
-    const [[user]] = await pool.query(q, [username])
+    const [user] = await knex('user')
+      .select('username', 'password')
+      .where('username', username)
 
     if (user) {
       return res.status(400).json({ error: 'User already exists' })
@@ -20,9 +20,7 @@ export async function register(req, res) {
     const salt = await bcrypt.genSalt(saltRounds)
     const hashedPassword = await bcrypt.hash(password, salt)
 
-    const insertQuery = 'INSERT INTO user (username, password) VALUES (?, ?)'
-
-    await pool.query(insertQuery, [username, hashedPassword])
+    await knex('user').insert({ username: username, password: hashedPassword })
 
     res.status(200).json({ ok: 'User successfully created' })
   } catch (err) {
@@ -33,10 +31,10 @@ export async function register(req, res) {
 export async function login(req, res) {
   const { username, password } = req.body
 
-  const q = 'SELECT password FROM user WHERE username = ?'
-
   try {
-    const [[user]] = await pool.query(q, [username])
+    const [user] = await knex('user')
+      .select('password')
+      .where('username', username)
 
     if (!user) {
       return res.status(400).json({ error: 'Invalid username or password' })
@@ -49,7 +47,7 @@ export async function login(req, res) {
 
     const token = jwt.sign({ userId: user.id }, process.env.SECRET_KEY)
 
-    res.status(200).json({ token: token })
+    res.status(200).json({ token })
   } catch (err) {
     handleError(err, res)
   }
@@ -65,18 +63,18 @@ export async function updateUser(req, res) {
     return res.status(403).json({ error: 'No access' })
   }
 
-  const q = `UPDATE user
-       SET username = ?
-       WHERE user_id = ?`
-
   try {
-    const [result] = await pool.query(q, [username, id])
+    const affectedRows = await knex('user')
+      .update({ username })
+      .where('user_id', id)
 
-    if (result.affectedRows) {
-      res.status(200).json({ ok: 'Updated' })
-    } else {
-      res.status(404).json({ error: `User with id=${id} does not exists` })
+    if (!affectedRows) {
+      return res
+        .status(404)
+        .json({ error: `User with id=${id} does not exists` })
     }
+
+    res.status(200).json()
   } catch (err) {
     handleError(err, res)
   }

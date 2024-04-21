@@ -4,38 +4,33 @@ import {
   constructOrderBy,
   getFilters
 } from '../common/query.js'
-import pool from '../database/database.js'
+import knex from '../database/database.js'
 
 /**
  * @param props {{
  *  includeBooks: boolean,
- *  filters: string[],
- *  orderBy: string,
- *  limit: string,
- *  offset: string
  * }}
- * @returns {string} query
  */
-function constructQuery(props) {
-  const {
-    includeBooks = false,
-    filters = [],
-    orderby = '',
-    limit = '',
-    offset = ''
-  } = props
+function baseQuery(props) {
+  const { includeBooks = false } = props
 
-  const fields = ['author_id as id', 'first_name', 'last_name', 'image_url']
+  const query = knex({ a: 'author' }).select(
+    { id: 'author_id' },
+    'first_name',
+    'last_name',
+    'image_url'
+  )
 
-  if (includeBooks) {
-    fields.push(`COALESCE((
-      SELECT JSON_ARRAYAGG(JSON_OBJECT(
-        'id', b.book_id,
-        'title', b.title,
-        'description', b.description,
-        'cover_url', b.cover_url,
-        'publication_date', date_format(publication_date, '%m-%d-%Y'),
-        'copies_owned', b.copies_owned
+  const booksQuery = `
+    COALESCE((
+      SELECT JSON_ARRAYAGG(
+        JSON_OBJECT(
+          'id', b.book_id,
+          'title', b.title,
+          'description', b.description,
+          'cover_url', b.cover_url,
+          'publication_date', date_format(publication_date, '%m-%d-%Y'),
+          'copies_owned', b.copies_owned
         )
       ) FROM book AS b
       INNER JOIN book_author ba ON ba.book_id = b.book_id
@@ -43,27 +38,13 @@ function constructQuery(props) {
       ORDER BY a.first_name
       ), JSON_ARRAY()
     ) AS books
-  `)
+  `
+
+  if (includeBooks) {
+    query.select(knex.raw(booksQuery))
   }
 
-  const whereClause =
-    filters.length === 0 ? '' : 'WHERE ' + filters.join(' AND ')
-
-  return `SELECT ${fields.join(', ')} FROM author a ${whereClause} ${orderby} ${limit} ${offset}`
-}
-
-async function getAuthorByIdAsync(id) {
-  const q = constructQuery({
-    includeBooks: true,
-    filters: ['author_id = ?']
-  })
-
-  const [[author]] = await pool.query(q, [id])
-  if (author) {
-    author.books = JSON.parse(author.books)
-  }
-
-  return author
+  return query
 }
 
 function notExistsError(res, id) {
@@ -72,17 +53,40 @@ function notExistsError(res, id) {
   })
 }
 
+export async function createAuthor(req, res) {
+  if (req.file && req.file.path) {
+    req.body.image_url = req.file.path
+  }
+
+  try {
+    const [id] = await knex('author').insert(req.body)
+
+    const [author] = await baseQuery({
+      includeBooks: false
+    }).where('author_id', id)
+
+    res.status(201).json(author)
+  } catch (err) {
+    handleError(err, res)
+  }
+}
+
 export async function getAuthorById(req, res) {
   const { id } = req.params
 
   try {
-    const author = await getAuthorByIdAsync(id)
+    const [author] = await baseQuery({ includeBooks: true }).where(
+      'author_id',
+      id
+    )
 
-    if (author) {
-      res.status(200).json(author)
-    } else {
-      notExistsError(res, id)
+    if (!author) {
+      return notExistsError(res, id)
     }
+
+    author.books = JSON.parse(author.books)
+
+    res.status(200).json(author)
   } catch (err) {
     handleError(err, res)
   }
@@ -91,34 +95,23 @@ export async function getAuthorById(req, res) {
 export async function deleteAuthorById(req, res) {
   const { id } = req.params
 
-  const conn = await pool.getConnection()
-
   try {
-    await conn.beginTransaction()
+    await knex.transaction(async trx => {
+      await knex('book_author').delete().where('author_id', id).transacting(trx)
 
-    /* Delete relations */
-    await conn.query(
-      `DELETE ba FROM book_author ba
-       WHERE ba.author_id = ?`,
-      [id]
-    )
+      return await knex('author')
+        .delete()
+        .where('author_id', id)
+        .transacting(trx)
+    })
 
-    const [result] = await conn.query(
-      `DELETE FROM author
-       WHERE author_id = ?`,
-      [id]
-    )
-
-    if (result.affectedRows) {
-      res.status(204).json()
-    } else {
-      notExistsError(res, id)
+    if (!affectedRows) {
+      return notExistsError(res, id)
     }
 
-    await conn.commit()
+    res.status(204).json()
   } catch (err) {
     handleError(err, res)
-    await conn.rollback()
   }
 }
 
@@ -129,34 +122,20 @@ export async function updateAuthorById(req, res) {
     req.body.image_url = req.file.path
   }
 
-  const q = `UPDATE author SET ? WHERE author_id = ?`
-
   try {
-    const [result] = await pool.query(q, [req.body, id])
+    const affectedRows = await knex('author')
+      .update(req.body)
+      .where('author_id', id)
 
-    if (result.affectedRows) {
-      const author = await getAuthorByIdAsync(id)
-
-      res.status(200).json(author)
-    } else {
-      notExistsError(res, id)
+    if (!affectedRows) {
+      return notExistsError(res, id)
     }
-  } catch (err) {
-    handleError(err, res)
-  }
-}
 
-export async function createAuthor(req, res) {
-  const q = `INSERT INTO author SET ?`
+    const [author] = await baseQuery({
+      includeBooks: true
+    }).where('author_id', id)
 
-  if (req.file && req.file.path) {
-    req.body.image_url = req.file.path
-  }
-
-  try {
-    const [result] = await pool.query(q, [req.body])
-
-    const author = await getAuthorByIdAsync(result.insertId)
+    author.books = JSON.parse(author.books)
 
     res.status(200).json(author)
   } catch (err) {
@@ -164,20 +143,23 @@ export async function createAuthor(req, res) {
   }
 }
 
-const availableFilters = query => [
-  { filter: 'first_name = ?', value: query.firstname },
-  { filter: 'last_name = ?', value: query.lastname }
-]
+const availableFilters = query =>
+  [
+    { condition: 'first_name = ?', value: query.firstname },
+    { condition: 'last_name = ?', value: query.lastname }
+  ].filter(filter => filter.value !== undefined)
 
 export async function getAuthorsCount(req, res) {
-  const { filters, values } = getFilters(availableFilters(req.query))
-
-  const q = addWhereClause('SELECT COUNT(*) as count FROM author', filters)
-
   try {
-    const [[result]] = await pool.query(q, values)
+    const query = knex('author').select(knex.raw('count(*) as count'))
 
-    res.status(200).json({ count: result.count })
+    availableFilters(req.query).map(filter => {
+      query.where(knex.raw(filter.condition, [filter.value]))
+    })
+
+    const [result] = await query
+
+    res.status(200).json(result)
   } catch (err) {
     return handleError(err)
   }
@@ -186,23 +168,30 @@ export async function getAuthorsCount(req, res) {
 export async function getAuthors(req, res) {
   const userQuery = req.query
 
-  const { filters, values } = getFilters(availableFilters(req.query))
+  const query = baseQuery({
+    includeBooks: userQuery.includebooks
+  })
+    .limit(userQuery.limit)
+    .offset(userQuery.offset)
 
-  const q = constructQuery({
-    includeBooks: userQuery.includebooks,
-    filters: filters,
-    limit: 'LIMIT ?',
-    offset: 'OFFSET ?',
-    orderBy: constructOrderBy(userQuery.orderby, {
-      firstname: 'first_name',
-      lastname: 'last_name'
-    })
+  availableFilters(userQuery).map(filter => {
+    query.where(knex.raw(filter.condition, [filter.value]))
   })
 
-  values.push(userQuery.limit, userQuery.offset)
+  if (userQuery.orderby) {
+    const [apiColumn, sortingOrder] = userQuery.orderby.split('-')
+
+    const dbColumn =
+      {
+        firstname: 'first_name',
+        lastname: 'last_name'
+      }[apiColumn] ?? apiColumn
+
+    query.orderBy(dbColumn, sortingOrder ?? 'desc')
+  }
 
   try {
-    const [results] = await pool.query(q, values)
+    const results = await query
 
     for (const res of results) {
       if (userQuery.includebooks) {

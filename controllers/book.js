@@ -4,44 +4,39 @@ import {
   constructOrderBy,
   getFilters
 } from '../common/query.js'
-import pool from '../database/database.js'
+import knex from '../database/database.js'
+
+function notExistsError(res, id) {
+  return res.status(404).json({
+    error: `Author with id=${id} does not exists`
+  })
+}
 
 /**
  * @param props {{
  *  includeAuthors: boolean,
- *  includeCategories: boolean,
- *  filters: string[],
- *  orderBy: string,
- *  limit: string,
- *  offset: string
+ *  includeCategories: boolean
  * }}
- * @returns {string} query
  */
-function constructQuery(props) {
-  const {
-    includeAuthors = false,
-    includeCategories = false,
-    filters = [],
-    orderby = '',
-    limit = '',
-    offset = ''
-  } = props
+function baseQuery(props) {
+  const { includeAuthors = false, includeCategories = false } = props
 
-  const fields = [
-    'book_id as id',
+  const query = knex({ b: 'book' }).select(
+    { id: 'book_id' },
     'title',
     'description',
     'cover_url',
-    "date_format(publication_date, '%m-%d-%Y') as publication_date",
+    knex.raw("date_format(publication_date, '%Y-%m-%d') AS publication_date"),
     'copies_owned'
-  ]
+  )
 
-  if (includeAuthors) {
-    fields.push(`COALESCE((
-      SELECT JSON_ARRAYAGG(JSON_OBJECT(
-        'id', a.author_id,
-        'first_name', a.first_name,
-        'last_name', a.last_name
+  const authorsQuery = `
+    COALESCE((
+      SELECT JSON_ARRAYAGG(
+        JSON_OBJECT(
+          'id', a.author_id,
+          'first_name', a.first_name,
+          'last_name', a.last_name
         )
       ) FROM author AS a
       INNER JOIN book_author ba ON ba.author_id = a.author_id
@@ -49,52 +44,49 @@ function constructQuery(props) {
       ORDER BY a.first_name
       ), JSON_ARRAY()
     ) AS authors
-  `)
-  }
-
-  if (includeCategories) {
-    fields.push(`COALESCE((
-      SELECT JSON_ARRAYAGG(JSON_OBJECT(
-        'id', c.category_id,
-        'name', c.name
+    `
+  const categoriesQuery = `
+    COALESCE((
+      SELECT JSON_ARRAYAGG(
+        JSON_OBJECT(
+          'id', c.category_id,
+          'name', c.name
         )
       ) FROM category AS c
       INNER JOIN book_category bc ON bc.category_id = c.category_id
       WHERE bc.book_id = b.book_id
       ORDER BY c.name
-    ),
-    JSON_ARRAY()
-  ) AS categories
-  `)
+      ), JSON_ARRAY()
+    ) AS categories
+    `
+  if (includeAuthors) {
+    query.select(knex.raw(authorsQuery))
   }
 
-  const whereClause =
-    filters.length === 0 ? '' : 'WHERE ' + filters.join(' AND ')
-
-  return `SELECT ${fields.join(', ')} FROM book b ${whereClause} ${orderby} ${limit} ${offset}`
-}
-
-async function getBookByIdAsync(id) {
-  const q = constructQuery({
-    includeAuthors: true,
-    includeCategories: true,
-    filters: ['book_id = ?']
-  })
-
-  const [[book]] = await pool.query(q, [id])
-
-  if (book) {
-    book.categories = JSON.parse(book.categories)
-    book.authors = JSON.parse(book.authors)
+  if (includeCategories) {
+    query.select(knex.raw(categoriesQuery))
   }
 
-  return book
+  return query
 }
 
-function notExistsError(res, id) {
-  return res.status(404).json({
-    error: `Author with id=${id} does not exists`
-  })
+export async function createBook(req, res) {
+  if (req.file && req.file.path) {
+    req.body.cover_url = req.file.path
+  }
+
+  try {
+    const [id] = await knex('book').insert(req.body)
+
+    const [book] = await baseQuery({
+      includeAuthors: false,
+      includeCategories: false
+    }).where('book_id', id)
+
+    res.status(201).json(book)
+  } catch (err) {
+    handleError(err, res)
+  }
 }
 
 export async function updateBookById(req, res) {
@@ -104,36 +96,24 @@ export async function updateBookById(req, res) {
     req.body.cover_url = req.file.path
   }
 
-  const q = `UPDATE book SET ? WHERE book_id = ?`
-
   try {
-    const [result] = await pool.query(q, [req.body, id])
+    const affectedRows = await knex('book')
+      .update(req.body)
+      .where('book_id', id)
 
-    if (result.affectedRows) {
-      const book = await getBookByIdAsync(id)
-
-      res.status(200).json(book)
-    } else {
-      notExistsError(res, id)
+    if (!affectedRows) {
+      return notExistsError(res, id)
     }
-  } catch (err) {
-    handleError(err, res)
-  }
-}
 
-export async function createBook(req, res) {
-  const q = `INSERT INTO book SET ?`
+    const [book] = await baseQuery({
+      includeAuthors: true,
+      includeCategories: true
+    }).where('book_id', id)
 
-  if (req.file && req.file.path) {
-    req.body.cover_url = req.file.path
-  }
+    book.authors = JSON.parse(book.authors)
+    book.categories = JSON.parse(book.categories)
 
-  try {
-    const [result] = await pool.query(q, [req.body])
-
-    const book = await getBookByIdAsync(result.insertId)
-
-    res.status(201).json(book)
+    res.status(200).json(book)
   } catch (err) {
     handleError(err, res)
   }
@@ -143,11 +123,17 @@ export async function getBookById(req, res) {
   const { id } = req.params
 
   try {
-    const book = await getBookByIdAsync(id)
+    const [book] = await baseQuery({
+      includeAuthors: true,
+      includeCategories: true
+    }).where('book_id', id)
 
     if (!book) {
       return notExistsError(res, id)
     }
+
+    book.authors = JSON.parse(book.authors)
+    book.categories = JSON.parse(book.categories)
 
     res.status(200).json(book)
   } catch (err) {
@@ -158,36 +144,36 @@ export async function getBookById(req, res) {
 export async function deleteBookById(req, res) {
   const { id } = req.params
 
-  const q = `DELETE FROM book WHERE book_id = ?`
-
   try {
-    const [result] = await pool.query(q, [id])
+    const affectedRows = await knex('book').delete().where('book_id', id)
 
-    if (result.affectedRows) {
-      res.status(204).json()
-    } else {
-      notExistsError(res, id)
+    if (!affectedRows) {
+      return notExistsError(res, id)
     }
+    res.status(204).json()
   } catch (err) {
     handleError(err, res)
   }
 }
 
-const availableFilters = query => [
-  { filter: 'title = ?', value: query.title },
-  { filter: 'publication_date > ?', value: query.publicationdatestart },
-  { filter: 'publication_date < ?', value: query.publicationdateend }
-]
+const availableFilters = query =>
+  [
+    { condition: 'title = ?', value: query.title },
+    { condition: 'publication_date > ?', value: query.publicationdatestart },
+    { condition: 'publication_date < ?', value: query.publicationdateend }
+  ].filter(filter => filter.value !== undefined)
 
 export async function getBooksCount(req, res) {
-  const { filters, values } = getFilters(availableFilters(req.query))
-
-  const q = addWhereClause('SELECT COUNT(*) as count FROM book', filters)
-
   try {
-    const [[result]] = await pool.query(q, values)
+    const query = knex('book').select(knex.raw('count(*) as count'))
 
-    res.status(200).json({ count: result.count })
+    availableFilters(req.query).map(filter => {
+      query.where(knex.raw(filter.condition, [filter.value]))
+    })
+
+    const [result] = await query
+
+    res.status(200).json(result)
   } catch (err) {
     return handleError(err)
   }
@@ -196,23 +182,28 @@ export async function getBooksCount(req, res) {
 export async function getBooks(req, res) {
   const userQuery = req.query
 
-  const { filters, values } = getFilters(availableFilters(userQuery))
-
-  const q = constructQuery({
+  const query = baseQuery({
     includeAuthors: userQuery.includeauthors,
-    includeCategories: userQuery.includecategories,
-    filters: filters,
-    limit: 'LIMIT ?',
-    offset: 'OFFSET ?',
-    orderBy: constructOrderBy(userQuery.orderby, {
-      publicationdate: 'publication_date'
-    })
+    includeCategories: userQuery.includecategories
+  })
+    .limit(userQuery.limit)
+    .offset(userQuery.offset)
+
+  availableFilters(userQuery).map(filter => {
+    query.where(knex.raw(filter.condition, [filter.value]))
   })
 
-  values.push(userQuery.limit, userQuery.offset)
+  if (userQuery.orderby) {
+    const [apiColumn, sortingOrder] = userQuery.orderby.split('-')
+
+    const dbColumn =
+      { publicationdate: 'publication_date' }[apiColumn] ?? apiColumn
+
+    query.orderBy(dbColumn, sortingOrder ?? 'desc')
+  }
 
   try {
-    const [results] = await pool.query(q, values)
+    const results = await query
 
     for (const res of results) {
       if (userQuery.includeauthors) {
