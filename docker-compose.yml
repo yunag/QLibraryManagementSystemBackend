@@ -25,9 +25,9 @@ services:
         - action: rebuild
           path: package.json
     ports:
-      - ${PORT}:${PORT}
+      - ${PORT:-3000}:${PORT:-3000}
     expose:
-      - ${PORT}
+      - ${PORT:-3000}
     depends_on:
       - mariadb
     environment:
