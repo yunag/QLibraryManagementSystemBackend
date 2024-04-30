@@ -3,7 +3,7 @@ import knex from '../database/database.js'
 
 function notExistsError(res, id) {
   return res.status(404).json({
-    error: `Author with id=${id} does not exists`
+    error: `Book with id=${id} does not exists`
   })
 }
 
@@ -21,7 +21,7 @@ function baseQuery(props) {
     'title',
     'description',
     'cover_url',
-    knex.raw("date_format(publication_date, '%Y-%m-%d') AS publication_date"),
+    knex.raw("date_format(publication_date, '%d-%m-%Y') AS publication_date"),
     'copies_owned'
   )
 
@@ -140,7 +140,11 @@ export async function deleteBookById(req, res) {
   const { id } = req.params
 
   try {
-    const affectedRows = await knex('book').delete().where('book_id', id)
+    const affectedRows = await knex.transaction(async trx => {
+      await knex('book_category').delete().where('book_id', id).transacting(trx)
+      await knex('book_author').delete().where('book_id', id).transacting(trx)
+      return await knex('book').delete().where('book_id', id).transacting(trx)
+    })
 
     if (!affectedRows) {
       return notExistsError(res, id)
@@ -153,7 +157,11 @@ export async function deleteBookById(req, res) {
 
 const availableFilters = query =>
   [
-    { condition: 'title = ?', value: query.title },
+    {
+      condition:
+        "SOUNDEX(title) LIKE CONCAT(TRIM(TRAILING '0' FROM SOUNDEX(?)), '%')",
+      value: query.title
+    },
     { condition: 'publication_date > ?', value: query.publicationdatestart },
     { condition: 'publication_date < ?', value: query.publicationdateend }
   ].filter(filter => filter.value !== undefined)

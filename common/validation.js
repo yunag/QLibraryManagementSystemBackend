@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { fromError } from 'zod-validation-error'
 import {
   AuthorSchema,
   BookSchema,
@@ -18,7 +19,9 @@ export default schema => (req, res, next) => {
 
     next()
   } catch (err) {
-    return res.status(400).send(err.issues)
+    const validationError = fromError(err)
+
+    return res.status(400).json({ error: validationError.toString() })
   }
 }
 
@@ -76,7 +79,9 @@ export const GetBooks = {
           'rating',
           'rating-asc',
           'title',
-          'title-asc'
+          'title-asc',
+          'id',
+          'id-asc'
         ])
         .optional()
     })
