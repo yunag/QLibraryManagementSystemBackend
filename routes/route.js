@@ -6,7 +6,8 @@ import {
   AuthorController,
   AuthorBookController,
   CategoryController,
-  BookCategoryController
+  BookCategoryController,
+  BookRatingController
 } from '../controllers/index.js'
 import authToken from '../middleware/auth.js'
 import path from 'path'
@@ -128,6 +129,12 @@ router.delete(
   authToken,
   AuthorBookController.deleteRelation
 )
+router.put(
+  '/books/:bookid/authors',
+  authToken,
+  validate(Validation.updateRelations),
+  AuthorBookController.updateRelations
+)
 
 /* Relationship between books and categories */
 router.post(
@@ -139,6 +146,20 @@ router.delete(
   '/books/:bookid/categories/:categoryid',
   authToken,
   BookCategoryController.deleteRelation
+)
+router.put(
+  '/books/:bookid/categories',
+  authToken,
+  validate(Validation.updateRelations),
+  BookCategoryController.updateRelations
+)
+
+/* Book rating */
+router.put(
+  '/books/:bookid/rating/',
+  authToken,
+  validate(Validation.createOrUpdateRating),
+  BookRatingController.createOrUpdateRating
 )
 
 export default router

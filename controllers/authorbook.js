@@ -10,7 +10,31 @@ export async function createRelation(req, res) {
       book_id: bookid
     })
 
-    res.status(201).json({ ok: 'Relationship created' })
+    res.status(201).json()
+  } catch (err) {
+    handleError(err, res)
+  }
+}
+
+export async function updateRelations(req, res) {
+  const { bookid } = req.params
+  const { ids } = req.body
+
+  try {
+    const relations = ids.map(id => ({ author_id: id, book_id: bookid }))
+
+    await knex.transaction(async trx => {
+      await knex('book_author')
+        .delete()
+        .where('book_id', bookid)
+        .transacting(trx)
+
+      if (relations.length) {
+        await knex('book_author').insert(relations).transacting(trx)
+      }
+    })
+
+    res.status(200).json()
   } catch (err) {
     handleError(err, res)
   }

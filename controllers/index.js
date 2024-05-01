@@ -4,6 +4,7 @@ import * as UserController from './user.js'
 import * as AuthorBookController from './authorbook.js'
 import * as CategoryController from './category.js'
 import * as BookCategoryController from './bookcategory.js'
+import * as BookRatingController from './bookrating.js'
 
 export {
   BookController,
@@ -11,5 +12,6 @@ export {
   AuthorController,
   AuthorBookController,
   CategoryController,
-  BookCategoryController
+  BookCategoryController,
+  BookRatingController
 }

@@ -22,7 +22,7 @@ export async function register(req, res) {
 
     await knex('user').insert({ username: username, password: hashedPassword })
 
-    res.status(200).json({ ok: 'User successfully created' })
+    res.status(200).json()
   } catch (err) {
     handleError(err, res)
   }
@@ -33,7 +33,7 @@ export async function login(req, res) {
 
   try {
     const [user] = await knex('user')
-      .select('password')
+      .select({ id: 'user_id' }, 'password')
       .where('username', username)
 
     if (!user) {

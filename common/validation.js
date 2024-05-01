@@ -109,3 +109,15 @@ export const GetAuthors = {
     })
     .strict()
 }
+
+export const createOrUpdateRating = {
+  body: z.object({
+    rating: z.coerce.number().int().min(1).max(10)
+  })
+}
+
+export const updateRelations = {
+  body: z.object({
+    ids: z.coerce.number().array()
+  })
+}

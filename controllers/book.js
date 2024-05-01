@@ -21,6 +21,8 @@ function baseQuery(props) {
     'title',
     'description',
     'cover_url',
+    { rating: 'avg_rating' },
+    'rate_count',
     knex.raw("date_format(publication_date, '%d-%m-%Y') AS publication_date"),
     'copies_owned'
   )

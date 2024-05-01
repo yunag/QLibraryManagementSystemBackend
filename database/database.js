@@ -7,7 +7,8 @@ export default knex({
     port: 3306,
     user: 'root',
     password: process.env.MYSQL_ROOT_PASSWORD,
-    database: 'qlibrarydb'
+    database: 'qlibrarydb',
+    decimalNumbers: true
   },
   pool: { min: 0, max: 7 }
 })

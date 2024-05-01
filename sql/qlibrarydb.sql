@@ -39,6 +39,8 @@ CREATE TABLE IF NOT EXISTS book (
   cover_url VARCHAR(255),
   publication_date DATE,
   copies_owned SMALLINT UNSIGNED,
+  avg_rating DECIMAL(5, 2) DEFAULT 0,
+  rate_count INT UNSIGNED DEFAULT 0,
   PRIMARY KEY (book_id),
   KEY idx_title (title)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4;
