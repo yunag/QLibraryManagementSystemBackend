@@ -55,11 +55,13 @@ export const UpdateAuthor = {
 }
 
 export const GetBooksCount = {
-  query: z.object({
-    title: z.string().trim().optional(),
-    publicationdatestart: z.coerce.date().optional(),
-    publicationdateend: z.coerce.date().optional()
-  })
+  query: z
+    .object({
+      title: z.string().trim().optional(),
+      publicationdatestart: z.coerce.date().optional(),
+      publicationdateend: z.coerce.date().optional()
+    })
+    .strict()
 }
 
 export const GetBooks = {
