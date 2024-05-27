@@ -67,8 +67,8 @@ export const GetBooksCount = {
 export const GetBooks = {
   query: z
     .object({
-      limit: z.coerce.number().min(1).max(5000).default(200),
-      offset: z.coerce.number().min(0).default(0),
+      page: z.coerce.number().min(0).default(0),
+      perpage: z.coerce.number().min(1).default(20),
       title: z.string().trim().optional(),
       publicationdatestart: z.coerce.date().optional(),
       publicationdateend: z.coerce.date().optional(),
@@ -100,8 +100,8 @@ export const GetAuthorsCount = {
 export const GetAuthors = {
   query: z
     .object({
-      limit: z.coerce.number().min(1).max(5000).default(200),
-      offset: z.coerce.number().min(0).default(0),
+      page: z.coerce.number().min(0).default(0),
+      perpage: z.coerce.number().min(1).default(20),
       firstname: z.string().trim().optional(),
       lastname: z.string().trim().optional(),
       includebooks: includeTypeField,
@@ -112,13 +112,13 @@ export const GetAuthors = {
     .strict()
 }
 
-export const createOrUpdateRating = {
+export const CreateOrUpdateRating = {
   body: z.object({
     rating: z.coerce.number().int().min(1).max(10)
   })
 }
 
-export const updateRelations = {
+export const UpdateRalations = {
   body: z.object({
     ids: z.coerce.number().array()
   })

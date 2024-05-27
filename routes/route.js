@@ -132,7 +132,7 @@ router.delete(
 router.put(
   '/books/:bookid/authors',
   authToken,
-  validate(Validation.updateRelations),
+  validate(Validation.UpdateRalations),
   AuthorBookController.updateRelations
 )
 
@@ -150,7 +150,7 @@ router.delete(
 router.put(
   '/books/:bookid/categories',
   authToken,
-  validate(Validation.updateRelations),
+  validate(Validation.UpdateRalations),
   BookCategoryController.updateRelations
 )
 
@@ -158,7 +158,7 @@ router.put(
 router.put(
   '/books/:bookid/rating/',
   authToken,
-  validate(Validation.createOrUpdateRating),
+  validate(Validation.CreateOrUpdateRating),
   BookRatingController.createOrUpdateRating
 )
 

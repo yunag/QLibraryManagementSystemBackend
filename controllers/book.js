@@ -186,21 +186,22 @@ export async function getBooksCount(req, res) {
 }
 
 export async function getBooks(req, res) {
-  const userQuery = req.query
-
   const query = baseQuery({
-    includeAuthors: userQuery.includeauthors,
-    includeCategories: userQuery.includecategories
+    includeAuthors: req.query.includeauthors,
+    includeCategories: req.query.includecategories
   })
-    .limit(userQuery.limit)
-    .offset(userQuery.offset)
+    .limit(req.query.perpage)
+    .offset(req.query.perpage * req.query.page)
 
-  availableFilters(userQuery).map(filter => {
+  const countQuery = knex('book').select(knex.raw('count(*) as count'))
+
+  availableFilters(req.query).map(filter => {
     query.where(knex.raw(filter.condition, [filter.value]))
+    countQuery.where(knex.raw(filter.condition, [filter.value]))
   })
 
-  if (userQuery.orderby) {
-    const [apiColumn, sortingOrder] = userQuery.orderby.split('-')
+  if (req.query.orderby) {
+    const [apiColumn, sortingOrder] = req.query.orderby.split('-')
 
     const dbColumn =
       { publicationdate: 'publication_date' }[apiColumn] ?? apiColumn
@@ -212,13 +213,24 @@ export async function getBooks(req, res) {
     const results = await query
 
     for (const res of results) {
-      if (userQuery.includeauthors) {
+      if (req.query.includeauthors) {
         res.authors = JSON.parse(res.authors)
       }
-      if (userQuery.includecategories) {
+      if (req.query.includecategories) {
         res.categories = JSON.parse(res.categories)
       }
     }
+
+    const [countResult] = await countQuery
+    const totalCount = countResult.count
+
+    res.setHeader('X-Pagination-Current-Page', req.query.page)
+    res.setHeader('X-Pagination-Total-Count', totalCount)
+    res.setHeader(
+      'X-Pagination-Page-Count',
+      Math.ceil(totalCount / req.query.perpage)
+    )
+    res.setHeader('X-Pagination-Per-Page', req.query.perpage)
 
     res.status(200).json(results)
   } catch (err) {
