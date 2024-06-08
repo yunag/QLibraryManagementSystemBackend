@@ -7,6 +7,15 @@ import {
   UserSchema
 } from '../database/schema.js'
 
+const asArray = type =>
+  z
+    .any()
+    .transform(value =>
+      Array.isArray(value)
+        ? value.map(el => type.parse(el))
+        : [type.parse(value)]
+    )
+
 export default schema => (req, res, next) => {
   try {
     const validated = z.object(schema).parse({
@@ -62,6 +71,17 @@ export const GetBooksCount = {
       publicationdateend: z.coerce.date().optional()
     })
     .strict()
+    .refine(
+      obj => {
+        if (obj.publicationdatestart && obj.publicationdateend) {
+          return obj.publicationdatestart < obj.publicationdateend
+        }
+        return true
+      },
+      {
+        message: '`publicationdatestart` must be less than `publicationdateend`'
+      }
+    )
 }
 
 export const GetBooks = {
@@ -72,6 +92,7 @@ export const GetBooks = {
       title: z.string().trim().optional(),
       publicationdatestart: z.coerce.date().optional(),
       publicationdateend: z.coerce.date().optional(),
+      ratings: asArray(z.coerce.number().int().min(0).max(10)).optional(),
       includeauthors: includeTypeField,
       includecategories: includeTypeField,
       orderby: z
@@ -88,6 +109,17 @@ export const GetBooks = {
         .optional()
     })
     .strict()
+    .refine(
+      obj => {
+        if (obj.publicationdatestart && obj.publicationdateend) {
+          return obj.publicationdatestart < obj.publicationdateend
+        }
+        return true
+      },
+      {
+        message: '`publicationdatestart` must be less than `publicationdateend`'
+      }
+    )
 }
 
 export const GetAuthorsCount = {
@@ -120,6 +152,6 @@ export const CreateOrUpdateRating = {
 
 export const UpdateRalations = {
   body: z.object({
-    ids: z.coerce.number().array()
+    ids: asArray(z.coerce.number().int())
   })
 }
