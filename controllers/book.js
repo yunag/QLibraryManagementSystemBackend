@@ -1,4 +1,5 @@
 import { handleError } from '../common/error.js'
+import { paginationHeaders } from '../common/pagination.js'
 import knex from '../database/database.js'
 
 function notExistsError(res, id) {
@@ -158,24 +159,32 @@ export async function deleteBookById(req, res) {
   }
 }
 
-const availableFilters = query =>
-  [
-    {
-      condition:
+const attachFilters = (req, query) => {
+  query.where(builder => {
+    if (req.query.title) {
+      builder.whereRaw(
         "SOUNDEX(title) LIKE CONCAT(TRIM(TRAILING '0' FROM SOUNDEX(?)), '%')",
-      value: query.title
-    },
-    { condition: 'publication_date > ?', value: query.publicationdatestart },
-    { condition: 'publication_date < ?', value: query.publicationdateend }
-  ].filter(filter => filter.value !== undefined)
+        [req.query.title]
+      )
+    }
+
+    if (req.query.publicationdatestart) {
+      builder.where('publication_date', '>=', req.query.publicationdatestart)
+    }
+    if (req.query.publicationdateend) {
+      builder.where('publication_date', '<=', req.query.publicationdateend)
+    }
+    if (req.query.ratings) {
+      builder.whereIn(knex.raw('CEIL(avg_rating)'), req.query.ratings)
+    }
+  })
+}
 
 export async function getBooksCount(req, res) {
   try {
     const query = knex('book').select(knex.raw('count(*) as count'))
 
-    availableFilters(req.query).map(filter => {
-      query.where(knex.raw(filter.condition, [filter.value]))
-    })
+    attachFilters(req, query)
 
     const [result] = await query
 
@@ -195,10 +204,8 @@ export async function getBooks(req, res) {
 
   const countQuery = knex('book').select(knex.raw('count(*) as count'))
 
-  availableFilters(req.query).map(filter => {
-    query.where(knex.raw(filter.condition, [filter.value]))
-    countQuery.where(knex.raw(filter.condition, [filter.value]))
-  })
+  attachFilters(req, query)
+  attachFilters(req, countQuery)
 
   if (req.query.orderby) {
     const [apiColumn, sortingOrder] = req.query.orderby.split('-')
@@ -224,13 +231,7 @@ export async function getBooks(req, res) {
     const [countResult] = await countQuery
     const totalCount = countResult.count
 
-    res.setHeader('X-Pagination-Current-Page', req.query.page)
-    res.setHeader('X-Pagination-Total-Count', totalCount)
-    res.setHeader(
-      'X-Pagination-Page-Count',
-      Math.ceil(totalCount / req.query.perpage)
-    )
-    res.setHeader('X-Pagination-Per-Page', req.query.perpage)
+    paginationHeaders(res, totalCount, req.query.page, req.query.perpage)
 
     res.status(200).json(results)
   } catch (err) {

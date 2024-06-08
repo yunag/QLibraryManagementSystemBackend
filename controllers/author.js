@@ -1,4 +1,5 @@
 import { handleError } from '../common/error.js'
+import { paginationHeaders } from '../common/pagination.js'
 import knex from '../database/database.js'
 
 /**
@@ -138,19 +139,22 @@ export async function updateAuthorById(req, res) {
   }
 }
 
-const availableFilters = query =>
-  [
-    { condition: 'first_name = ?', value: query.firstname },
-    { condition: 'last_name = ?', value: query.lastname }
-  ].filter(filter => filter.value !== undefined)
+const attachFilters = (req, query) => {
+  query.where(builder => {
+    if (req.query.firstname) {
+      builder.where('first_name', req.query.firstname)
+    }
+    if (req.query.lastname) {
+      builder.where('last_name', req.query.lastname)
+    }
+  })
+}
 
 export async function getAuthorsCount(req, res) {
   try {
     const query = knex('author').select(knex.raw('count(*) as count'))
 
-    availableFilters(req.query).map(filter => {
-      query.where(knex.raw(filter.condition, [filter.value]))
-    })
+    attachFilters(req, query)
 
     const [result] = await query
 
@@ -169,10 +173,8 @@ export async function getAuthors(req, res) {
 
   const countQuery = knex('author').select(knex.raw('count(*) as count'))
 
-  availableFilters(req.query).map(filter => {
-    query.where(knex.raw(filter.condition, [filter.value]))
-    countQuery.where(knex.raw(filter.condition, [filter.value]))
-  })
+  attachFilters(req, query)
+  attachFilters(req, countQuery)
 
   if (req.query.orderby) {
     const [apiColumn, sortingOrder] = req.query.orderby.split('-')
@@ -198,13 +200,7 @@ export async function getAuthors(req, res) {
     const [countResult] = await countQuery
     const totalCount = countResult.count
 
-    res.setHeader('X-Pagination-Current-Page', req.query.page)
-    res.setHeader('X-Pagination-Total-Count', totalCount)
-    res.setHeader(
-      'X-Pagination-Page-Count',
-      Math.ceil(totalCount / req.query.perpage)
-    )
-    res.setHeader('X-Pagination-Per-Page', req.query.perpage)
+    paginationHeaders(res, totalCount, req.query.page, req.query.perpage)
 
     res.status(200).json(results)
   } catch (err) {
