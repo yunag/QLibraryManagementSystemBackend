@@ -125,7 +125,8 @@ export const GetBooks = {
 export const GetAuthorsCount = {
   query: z.object({
     firstname: z.string().trim().optional(),
-    lastname: z.string().trim().optional()
+    lastname: z.string().trim().optional(),
+    name: z.string().trim().optional()
   })
 }
 
@@ -134,11 +135,19 @@ export const GetAuthors = {
     .object({
       page: z.coerce.number().min(0).default(0),
       perpage: z.coerce.number().min(1).default(20),
+      name: z.string().trim().optional(),
       firstname: z.string().trim().optional(),
       lastname: z.string().trim().optional(),
       includebooks: includeTypeField,
       orderby: z
-        .enum(['firstname', 'firstname-asc', 'lastname', 'lastname-asc'])
+        .enum([
+          'id',
+          'id-asc',
+          'firstname',
+          'firstname-asc',
+          'lastname',
+          'lastname-asc'
+        ])
         .optional()
     })
     .strict()

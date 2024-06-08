@@ -11,7 +11,7 @@ import {
 } from '../controllers/index.js'
 import authToken from '../middleware/auth.js'
 import path from 'path'
-import validate, * as Validation from '../common/validation.js'
+import validate, * as Validation from '../middleware/validation.js'
 
 const router = Router()
 const upload_destination = 'uploads'
