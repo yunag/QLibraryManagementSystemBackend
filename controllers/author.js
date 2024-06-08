@@ -141,6 +141,12 @@ export async function updateAuthorById(req, res) {
 
 const attachFilters = (req, query) => {
   query.where(builder => {
+    if (req.query.name) {
+      builder.whereRaw(
+        `LOWER(CONCAT(first_name, ' ', last_name)) LIKE ?`,
+        '%' + req.query.name.split('').join('%') + '%'
+      )
+    }
     if (req.query.firstname) {
       builder.where('first_name', req.query.firstname)
     }
