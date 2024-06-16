@@ -7,13 +7,13 @@ function notExistsError(res, id) {
   })
 }
 
-const baseQuery = knex('category').select({ id: 'category_id' }, 'name')
+const baseQuery = () => knex('category').select({ id: 'category_id' }, 'name')
 
 export async function createCategory(req, res) {
   try {
     const [id] = await knex('category').insert(req.body)
 
-    const [category] = await baseQuery.where('category_id', id)
+    const [category] = await baseQuery().where('category_id', id)
 
     res.status(201).json(category)
   } catch (err) {
@@ -25,7 +25,7 @@ export async function getCategoryById(req, res) {
   const { id } = req.params
 
   try {
-    const [category] = await baseQuery.where('category_id', id)
+    const [category] = await baseQuery().where('category_id', id)
 
     if (!category) {
       return notExistsError(res, id)
@@ -75,7 +75,7 @@ export async function updateCategoryById(req, res) {
       return notExistsError(res, id)
     }
 
-    const [category] = await baseQuery.where('category_id', id)
+    const [category] = await baseQuery().where('category_id', id)
 
     res.status(200).json(category)
   } catch (err) {
@@ -85,7 +85,7 @@ export async function updateCategoryById(req, res) {
 
 export async function getCategories(_req, res) {
   try {
-    const results = await baseQuery
+    const results = await baseQuery()
 
     res.status(200).json(results)
   } catch (err) {
