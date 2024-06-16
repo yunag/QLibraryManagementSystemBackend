@@ -92,7 +92,7 @@ export async function deleteAuthorById(req, res) {
   const { id } = req.params
 
   try {
-    await knex.transaction(async trx => {
+    const affectedRows = await knex.transaction(async trx => {
       await knex('book_author').delete().where('author_id', id).transacting(trx)
 
       return await knex('author')
